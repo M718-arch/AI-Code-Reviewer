@@ -1,0 +1,265 @@
+.file-uploader {
+  width: 100%;
+}
+
+.input-method-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 0.5rem;
+}
+
+.tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  background: none;
+  color: #718096;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border-radius: 0.5rem 0.5rem 0 0;
+}
+
+.tab-btn:hover {
+  color: #667eea;
+  background: #f7fafc;
+}
+
+.tab-btn.active {
+  color: #667eea;
+  border-bottom: 3px solid #667eea;
+  margin-bottom: -0.5rem;
+}
+
+.dropzone {
+  border: 3px dashed #cbd5e0;
+  border-radius: 1rem;
+  padding: 3rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: #f7fafc;
+}
+
+.dropzone.active {
+  border-color: #667eea;
+  background: rgba(102, 126, 234, 0.05);
+  transform: scale(1.02);
+}
+
+#file-input {
+  display: none;
+}
+
+.dropzone-label {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.upload-icon {
+  font-size: 3rem;
+  color: #667eea;
+}
+
+.dropzone h3 {
+  color: #4a5568;
+  margin: 0;
+}
+
+.dropzone p {
+  color: #718096;
+  margin: 0;
+}
+
+.file-types {
+  font-size: 0.85rem;
+  color: #a0aec0;
+  max-width: 400px;
+  margin-top: 0.5rem;
+}
+
+/* Paste Section */
+.paste-section {
+  background: #f7fafc;
+  border-radius: 1rem;
+  padding: 1rem;
+}
+
+.paste-textarea {
+  width: 100%;
+  padding: 1rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 0.5rem;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9rem;
+  resize: vertical;
+  background: white;
+  transition: all 0.3s ease;
+}
+
+.paste-textarea:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* GitHub Section */
+.github-section {
+  background: #f7fafc;
+  border-radius: 1rem;
+  padding: 2rem;
+}
+
+.github-input-group {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 0.25rem 0.25rem 0.25rem 1rem;
+  transition: all 0.3s ease;
+}
+
+.github-input-group:focus-within {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.github-icon {
+  color: #718096;
+  font-size: 1.2rem;
+}
+
+.github-input {
+  flex: 1;
+  padding: 0.75rem 0;
+  border: none;
+  font-size: 0.95rem;
+  background: transparent;
+}
+
+.github-input:focus {
+  outline: none;
+}
+
+.github-fetch-btn {
+  background: #667eea;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.github-fetch-btn:hover:not(:disabled) {
+  background: #5a67d8;
+  transform: translateY(-2px);
+}
+
+.github-fetch-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.github-hint {
+  color: #718096;
+  font-size: 0.85rem;
+  margin-top: 0.75rem;
+  text-align: center;
+}
+
+/* File Info Section (when code is loaded) */
+.file-info {
+  background: #f7fafc;
+  border-radius: 1rem;
+  padding: 1rem;
+}
+
+.file-details {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem;
+  background: white;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.file-icon {
+  font-size: 1.5rem;
+  color: #667eea;
+}
+
+.file-name {
+  flex: 1;
+  font-weight: 500;
+  color: #4a5568;
+  word-break: break-all;
+}
+
+.file-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-paste,
+.btn-clear {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.btn-paste {
+  background: #667eea;
+  color: white;
+}
+
+.btn-paste:hover {
+  background: #5a67d8;
+  transform: translateY(-2px);
+}
+
+.btn-clear {
+  background: #f56565;
+  color: white;
+}
+
+.btn-clear:hover {
+  background: #e53e3e;
+  transform: translateY(-2px);
+}
+
+.code-textarea {
+  width: 100%;
+  padding: 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9rem;
+  resize: vertical;
+  background: white;
+}
+
+.code-textarea:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}

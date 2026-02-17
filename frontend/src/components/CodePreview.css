@@ -1,0 +1,28 @@
+.code-preview {
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+.preview-header {
+  background: #2d2d3a;
+  padding: 0.8rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #40404e;
+}
+
+.filename {
+  color: #e2e8f0;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.language-badge {
+  background: #40404e;
+  color: #a0aec0;
+  padding: 0.2rem 0.8rem;
+  border-radius: 1rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+}
