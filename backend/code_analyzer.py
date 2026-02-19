@@ -1,638 +1,409 @@
 ﻿"""
-code_analyzer.py - AGGRESSIVE Bug Detection
-This WILL find bugs in your code!
+code_analyzer.py - Balanced Python Code Analyzer
+Finds real issues with minimal false positives
 """
 
 import ast
 import re
-from typing import List, Dict, Any
+import builtins
+from typing import List, Dict, Any, Set, Optional
+from pathlib import Path
 
 class CodeAnalyzer:
     def __init__(self, language='python'):
         self.language = language
-    
-    def analyze(self, code: str) -> List[Dict[str, Any]]:
-        """Main analysis method - FINDS REAL BUGS!"""
-        issues = []
+        self.builtins = set(dir(builtins))
         
-        print(f"🔍 Analyzing {len(code)} characters of code...")  # Debug
+    def analyze(self, code: str) -> List[Dict[str, Any]]:
+        """Main analysis method - finds REAL issues"""
+        issues = []
         
         if self.language == 'python':
             issues.extend(self._analyze_python(code))
         
         issues.extend(self._common_analysis(code))
         
-        print(f"✅ Found {len(issues)} issues!")  # Debug
+        # Sort by severity: HIGH > MEDIUM > LOW
+        severity_order = {'HIGH': 0, 'MEDIUM': 1, 'LOW': 2}
+        issues.sort(key=lambda x: severity_order.get(x['severity'], 3))
+        
         return issues
     
     def _analyze_python(self, code: str) -> List[Dict[str, Any]]:
-        """Python-specific bug detection - THIS FINDS EVERYTHING!"""
+        """Python-specific analysis using AST where possible"""
         issues = []
         
-        # ====================================================================
-        # BUG 1: Undefined variables
-        # ====================================================================
         try:
             tree = ast.parse(code)
-            defined_vars = set()
             
-            # Find all defined variables
+            # Track defined names with scope
+            analyzer = ScopeAnalyzer()
+            analyzer.visit(tree)
+            
+            # ====================================================================
+            # 1. SYNTAX ERRORS - Already caught by ast.parse
+            # ====================================================================
+            
+            # ====================================================================
+            # 2. MUTABLE DEFAULT ARGUMENTS
+            # ====================================================================
             for node in ast.walk(tree):
                 if isinstance(node, ast.FunctionDef):
-                    defined_vars.add(node.name)
-                    for arg in node.args.args:
-                        defined_vars.add(arg.arg)
-                elif isinstance(node, ast.ClassDef):
-                    defined_vars.add(node.name)
-                elif isinstance(node, ast.Assign):
-                    for target in node.targets:
-                        if isinstance(target, ast.Name):
-                            defined_vars.add(target.id)
-                elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
-                    defined_vars.add(node.id)
+                    for default in node.args.defaults:
+                        if isinstance(default, (ast.List, ast.Dict, ast.Set)):
+                            issues.append({
+                                'line': node.lineno,
+                                'problem': f'Mutable default argument in {node.name}()',
+                                'severity': 'HIGH',
+                                'suggestion': 'Use None as default and create mutable inside function',
+                                'category': 'bug',
+                                'code': f'def {node.name}(...)'
+                            })
             
-            # Add built-ins
-            builtins = ['print', 'len', 'str', 'int', 'float', 'list', 'dict', 
-                       'set', 'tuple', 'range', 'open', 'sum', 'min', 'max',
-                       'abs', 'round', 'type', 'isinstance', 'issubclass',
-                       'hasattr', 'getattr', 'setattr', 'delattr']
-            defined_vars.update(builtins)
-            
-            # Check for undefined variables
+            # ====================================================================
+            # 3. BARE EXCEPT CLAUSES
+            # ====================================================================
             for node in ast.walk(tree):
-                if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
-                    if node.id not in defined_vars and not node.id.startswith('_'):
+                if isinstance(node, ast.ExceptHandler):
+                    if node.type is None:
                         issues.append({
                             'line': node.lineno,
-                            'problem': f'Undefined variable: {node.id}',
+                            'problem': 'Bare except clause',
                             'severity': 'HIGH',
-                            'suggestion': f'Define {node.id} before using it',
-                            'category': 'bug'
+                            'suggestion': 'Catch specific exceptions (except ValueError:)',
+                            'category': 'error_handling',
+                            'code': 'except:'
                         })
+            
+            # ====================================================================
+            # 4. HARDCODED SECRETS
+            # ====================================================================
+            secret_patterns = [
+                (r'password\s*=\s*[\'\"][^\'\"]{8,}[\'\"]', 'Hardcoded password'),
+                (r'(api[_-]?key|apikey)\s*=\s*[\'\"][^\'\"]+[\'\"]', 'Hardcoded API key'),
+                (r'secret\s*=\s*[\'\"][^\'\"]+[\'\"]', 'Hardcoded secret'),
+                (r'token\s*=\s*[\'\"][^\'\"]+[\'\"]', 'Hardcoded token'),
+            ]
+            
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Assign):
+                    for target in node.targets:
+                        if isinstance(target, ast.Name) and isinstance(node.value, ast.Constant):
+                            var_name = target.id.lower()
+                            if any(secret in var_name for secret in ['password', 'api', 'secret', 'token']):
+                                if isinstance(node.value.value, str) and len(node.value.value) > 8:
+                                    issues.append({
+                                        'line': node.lineno,
+                                        'problem': f'Possible hardcoded {var_name}',
+                                        'severity': 'HIGH',
+                                        'suggestion': 'Use environment variables or a secrets manager',
+                                        'category': 'security',
+                                        'code': f'{target.id} = "********"'
+                                    })
+            
+            # ====================================================================
+            # 5. REDEFINING BUILT-INS
+            # ====================================================================
+            for node in ast.walk(tree):
+                if isinstance(node, ast.FunctionDef) and node.name in self.builtins:
+                    issues.append({
+                        'line': node.lineno,
+                        'problem': f'Function redefines built-in: {node.name}()',
+                        'severity': 'MEDIUM',
+                        'suggestion': f'Rename function (built-in {node.name} already exists)',
+                        'category': 'best_practice',
+                        'code': f'def {node.name}('
+                    })
+                elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+                    if node.id in self.builtins and node.id not in ['__file__', '__name__']:
+                        issues.append({
+                            'line': node.lineno,
+                            'problem': f'Variable redefines built-in: {node.id}',
+                            'severity': 'MEDIUM',
+                            'suggestion': f'Use a different variable name',
+                            'category': 'best_practice',
+                            'code': f'{node.id} = ...'
+                        })
+            
+            # ====================================================================
+            # 6. MISSING SELF IN CLASS METHODS
+            # ====================================================================
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef):
+                    for item in node.body:
+                        if isinstance(item, ast.FunctionDef):
+                            # Skip staticmethod and classmethod
+                            has_decorator = any(
+                                isinstance(d, ast.Name) and d.id in ['staticmethod', 'classmethod']
+                                for d in item.decorator_list
+                            )
+                            
+                            if not has_decorator and not item.name.startswith('__'):
+                                if not item.args.args or item.args.args[0].arg != 'self':
+                                    issues.append({
+                                        'line': item.lineno,
+                                        'problem': f'Method {item.name}() missing self parameter',
+                                        'severity': 'HIGH',
+                                        'suggestion': 'Add "self" as first parameter',
+                                        'category': 'bug',
+                                        'code': f'def {item.name}(self, ...)'
+                                    })
+            
+            # ====================================================================
+            # 7. COMPARING WITH NONE USING ==
+            # ====================================================================
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Compare):
+                    for op in node.ops:
+                        if isinstance(op, (ast.Eq, ast.NotEq)):
+                            for comparator in node.comparators:
+                                if isinstance(comparator, ast.Constant) and comparator.value is None:
+                                    issues.append({
+                                        'line': node.lineno,
+                                        'problem': 'Comparing None with == or !=',
+                                        'severity': 'LOW',
+                                        'suggestion': 'Use "is None" or "is not None"',
+                                        'category': 'best_practice',
+                                        'code': 'x == None'
+                                    })
+            
+            # ====================================================================
+            # 8. WILDCARD IMPORTS
+            # ====================================================================
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom):
+                    if node.module and node.names[0].name == '*':
+                        issues.append({
+                            'line': node.lineno,
+                            'problem': f'Wildcard import: from {node.module} import *',
+                            'severity': 'MEDIUM',
+                            'suggestion': 'Import only what you need',
+                            'category': 'best_practice',
+                            'code': f'from {node.module} import *'
+                        })
+            
+            # ====================================================================
+            # 9. EMPTY EXCEPT BLOCK
+            # ====================================================================
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ExceptHandler):
+                    if len(node.body) == 1 and isinstance(node.body[0], ast.Pass):
+                        issues.append({
+                            'line': node.lineno,
+                            'problem': 'Empty except block',
+                            'severity': 'MEDIUM',
+                            'suggestion': 'Handle the exception or at least log it',
+                            'category': 'error_handling',
+                            'code': 'except: pass'
+                        })
+            
+            # ====================================================================
+            # 10. TOO MANY ARGUMENTS
+            # ====================================================================
+            for node in ast.walk(tree):
+                if isinstance(node, ast.FunctionDef):
+                    arg_count = len(node.args.args)
+                    if arg_count > 7:
+                        issues.append({
+                            'line': node.lineno,
+                            'problem': f'Function {node.name}() has {arg_count} arguments',
+                            'severity': 'MEDIUM',
+                            'suggestion': 'Consider using a dataclass or reducing arguments',
+                            'category': 'design',
+                            'code': f'def {node.name}({", ".join(a.arg for a in node.args.args[:3])}...)'
+                        })
+            
+            # ====================================================================
+            # 11. VERY LONG FUNCTIONS
+            # ====================================================================
+            for node in ast.walk(tree):
+                if isinstance(node, ast.FunctionDef):
+                    # Count non-empty, non-decorator lines
+                    line_count = node.end_lineno - node.lineno + 1 if node.end_lineno else 0
+                    if line_count > 80:
+                        issues.append({
+                            'line': node.lineno,
+                            'problem': f'Function {node.name}() is very long ({line_count} lines)',
+                            'severity': 'MEDIUM',
+                            'suggestion': 'Break into smaller functions',
+                            'category': 'maintainability',
+                            'code': f'def {node.name}(): ...'
+                        })
+            
+            # ====================================================================
+            # 12. USING IS WITH LITERALS
+            # ====================================================================
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Compare):
+                    for op in node.ops:
+                        if isinstance(op, ast.Is):
+                            for comparator in node.comparators:
+                                if isinstance(comparator, ast.Constant) and comparator.value in [True, False, None]:
+                                    pass  # This is actually correct
+                                elif isinstance(comparator, (ast.Constant, ast.Num, ast.Str)):
+                                    issues.append({
+                                        'line': node.lineno,
+                                        'problem': 'Using "is" with literal',
+                                        'severity': 'LOW',
+                                        'suggestion': 'Use "==" for value comparison',
+                                        'category': 'best_practice',
+                                        'code': 'x is 5'
+                                    })
+            
         except SyntaxError as e:
-            # Handle syntax errors separately
             issues.append({
                 'line': e.lineno or 1,
                 'problem': f'Syntax error: {e.msg}',
                 'severity': 'HIGH',
                 'suggestion': 'Fix the syntax error',
-                'category': 'syntax'
+                'category': 'syntax',
+                'code': code.split('\n')[e.lineno - 1] if e.lineno else ''
             })
-        
-        # ====================================================================
-        # BUG 2: ZeroDivisionError
-        # ====================================================================
-        zero_div_pattern = r'(\w+|\d+)\s*/\s*0\b'
-        for match in re.finditer(zero_div_pattern, code):
-            line = code[:match.start()].count('\n') + 1
-            issues.append({
-                'line': line,
-                'problem': 'Potential ZeroDivisionError',
-                'severity': 'HIGH',
-                'suggestion': 'Check if denominator is zero before division',
-                'category': 'bug'
-            })
-        
-        zero_div_pattern2 = r'(\w+|\d+)\s*/\s*\(\s*(\w+|\d+)\s*-\s*\2\s*\)'
-        for match in re.finditer(zero_div_pattern2, code):
-            line = code[:match.start()].count('\n') + 1
-            issues.append({
-                'line': line,
-                'problem': 'Potential ZeroDivisionError (subtracting same value)',
-                'severity': 'HIGH',
-                'suggestion': 'Ensure denominator is not zero',
-                'category': 'bug'
-            })
-        
-        # ====================================================================
-        # BUG 3: Unclosed strings
-        # ====================================================================
-        lines = code.split('\n')
-        in_string = False
-        string_char = ''
-        for i, line in enumerate(lines, 1):
-            line_check = line
-            # Skip comments
-            if '#' in line_check:
-                line_check = line_check[:line_check.index('#')]
-            
-            for char in ['"', "'", '"""', "'''"]:
-                if char in line_check:
-                    count = line_check.count(char)
-                    if count % 2 != 0:
-                        issues.append({
-                            'line': i,
-                            'problem': f'Possible unclosed string: {char}',
-                            'severity': 'HIGH',
-                            'suggestion': f'Add closing {char}',
-                            'category': 'syntax'
-                        })
-        
-        # ====================================================================
-        # BUG 4: Missing colons
-        # ====================================================================
-        colon_keywords = ['if', 'elif', 'else', 'for', 'while', 'def', 'class', 
-                         'with', 'try', 'except', 'finally', 'else:']
-        
-        for i, line in enumerate(lines, 1):
-            stripped = line.strip()
-            if stripped and not stripped.startswith('#'):
-                for keyword in colon_keywords:
-                    if stripped.startswith(keyword) and not stripped.endswith(':'):
-                        if keyword != 'else' or stripped != 'else':
-                            issues.append({
-                                'line': i,
-                                'problem': f'Missing colon after {keyword}',
-                                'severity': 'HIGH',
-                                'suggestion': f'Add ":" at end of line',
-                                'category': 'syntax'
-                            })
-        
-        # ====================================================================
-        # BUG 5: Indentation errors
-        # ====================================================================
-        for i, line in enumerate(lines, 1):
-            if line.strip() and not line.strip().startswith('#'):
-                indent = len(line) - len(line.lstrip())
-                if indent > 0 and indent % 4 != 0:
-                    issues.append({
-                        'line': i,
-                        'problem': f'Bad indentation ({indent} spaces, should be multiple of 4)',
-                        'severity': 'MEDIUM',
-                        'suggestion': 'Use 4 spaces for indentation',
-                        'category': 'style'
-                    })
-        
-        # Check for mixed tabs and spaces
-        for i, line in enumerate(lines, 1):
-            if '\t' in line:
-                issues.append({
-                    'line': i,
-                    'problem': 'Mixed tabs and spaces',
-                    'severity': 'MEDIUM',
-                    'suggestion': 'Use only spaces (4 per indent)',
-                    'category': 'style'
-                })
-        
-        # ====================================================================
-        # BUG 6: Import errors
-        # ====================================================================
-        import_pattern = r'^(?:from\s+(\S+)\s+)?import\s+(\S+)'
-        for match in re.finditer(import_pattern, code, re.MULTILINE):
-            line = code[:match.start()].count('\n') + 1
-            module = match.group(1) or match.group(2)
-            
-            # Known non-existent modules
-            bad_imports = ['infinity', 'non_existent_module', 'non_existent_class']
-            if module in bad_imports:
-                issues.append({
-                    'line': line,
-                    'problem': f'Import of non-existent module: {module}',
-                    'severity': 'MEDIUM',
-                    'suggestion': f'Fix module name or install: pip install {module}',
-                    'category': 'import'
-                })
-        
-        # ====================================================================
-        # BUG 7: Index errors
-        # ====================================================================
-        index_pattern = r'(\w+)\s*\[\s*(\d+|-?\d+)\s*\]'
-        for match in re.finditer(index_pattern, code):
-            line = code[:match.start()].count('\n') + 1
-            index = int(match.group(2))
-            if abs(index) > 10:  # Suspiciously large index
-                issues.append({
-                    'line': line,
-                    'problem': f'Potential IndexError: list index {index} may be out of range',
-                    'severity': 'MEDIUM',
-                    'suggestion': 'Check if index is within bounds using len()',
-                    'category': 'bug'
-                })
-        
-        # ====================================================================
-        # BUG 8: Infinite recursion
-        # ====================================================================
-        func_pattern = r'def\s+(\w+)\s*\(.*?\):'
-        for match in re.finditer(func_pattern, code):
-            func_name = match.group(1)
-            func_body = code[match.end():]
-            # Check if function calls itself without condition
-            if re.search(rf'\b{func_name}\s*\(', func_body):
-                # Look for base case
-                has_return = 'return' in func_body[:200]
-                has_conditional = any(kw in func_body[:200] for kw in ['if', 'else', 'elif'])
-                
-                if has_return and not has_conditional:
-                    issues.append({
-                        'line': code[:match.start()].count('\n') + 1,
-                        'problem': f'Possible infinite recursion in {func_name}()',
-                        'severity': 'HIGH',
-                        'suggestion': 'Add a base case condition to stop recursion',
-                        'category': 'bug'
-                    })
-        
-        # ====================================================================
-        # BUG 9: File operations without existence check
-        # ====================================================================
-        file_ops = ['os.remove', 'os.unlink', 'open']
-        for op in file_ops:
-            pattern = rf'{op}\s*\(\s*[\'"]([^\'"]+)[\'"]'
-            for match in re.finditer(pattern, code):
-                line = code[:match.start()].count('\n') + 1
-                # Check if there's an exists check before
-                prev_lines = code[:match.start()].split('\n')[-5:]
-                has_check = any('os.path.exists' in line or 'os.path.isfile' in line for line in prev_lines)
-                
-                if not has_check:
-                    issues.append({
-                        'line': line,
-                        'problem': f'File operation without existence check: {op}',
-                        'severity': 'MEDIUM',
-                        'suggestion': f'Check if file exists with os.path.exists() before {op}',
-                        'category': 'security'
-                    })
-        
-        # ====================================================================
-        # BUG 10: Bare except
-        # ====================================================================
-        bare_except_pattern = r'except\s*:'
-        for match in re.finditer(bare_except_pattern, code):
-            line = code[:match.start()].count('\n') + 1
-            issues.append({
-                'line': line,
-                'problem': 'Bare except clause',
-                'severity': 'HIGH',
-                'suggestion': 'Catch specific exceptions instead',
-                'category': 'error_handling'
-            })
-        
-        # ====================================================================
-        # BUG 11: Mutable default arguments
-        # ====================================================================
-        mutable_pattern = r'def\s+\w+\(.*?=\s*\[\s*\].*?\):|def\s+\w+\(.*?=\s*\{\s*\}.*?\):|def\s+\w+\(.*?=\s*set\(\s*\).*?\):'
-        for match in re.finditer(mutable_pattern, code):
-            line = code[:match.start()].count('\n') + 1
-            issues.append({
-                'line': line,
-                'problem': 'Mutable default argument',
-                'severity': 'MEDIUM',
-                'suggestion': 'Use None as default and create mutable inside function',
-                'category': 'bug'
-            })
-        
-        # ====================================================================
-        # BUG 12: Comparing None with ==
-        # ====================================================================
-        none_eq_pattern = r'==\s*None|!=\s*None'
-        for match in re.finditer(none_eq_pattern, code):
-            line = code[:match.start()].count('\n') + 1
-            issues.append({
-                'line': line,
-                'problem': 'Comparing None with == or !=',
-                'severity': 'LOW',
-                'suggestion': 'Use "is None" or "is not None" instead',
-                'category': 'best_practice'
-            })
-        
-        # ====================================================================
-        # BUG 13: Unused variables
-        # ====================================================================
-        try:
-            tree = ast.parse(code)
-            assigned_vars = set()
-            used_vars = set()
-            
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Assign):
-                    for target in node.targets:
-                        if isinstance(target, ast.Name):
-                            assigned_vars.add(target.id)
-                elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
-                    used_vars.add(node.id)
-            
-            unused = assigned_vars - used_vars
-            for var in unused:
-                if not var.startswith('_') and var not in builtins:
-                    # Find line number
-                    for node in ast.walk(tree):
-                        if isinstance(node, ast.Assign):
-                            for target in node.targets:
-                                if isinstance(target, ast.Name) and target.id == var:
-                                    issues.append({
-                                        'line': node.lineno,
-                                        'problem': f'Unused variable: {var}',
-                                        'severity': 'LOW',
-                                        'suggestion': f'Remove {var} or use it',
-                                        'category': 'style'
-                                    })
-        except:
-            pass
-        
-        # ====================================================================
-        # BUG 14: Too many arguments
-        # ====================================================================
-        try:
-            tree = ast.parse(code)
-            for node in ast.walk(tree):
-                if isinstance(node, ast.FunctionDef):
-                    if len(node.args.args) > 7:
-                        issues.append({
-                            'line': node.lineno,
-                            'problem': f'Function {node.name} has too many arguments ({len(node.args.args)})',
-                            'severity': 'MEDIUM',
-                            'suggestion': 'Reduce number of arguments or use a data class',
-                            'category': 'design'
-                        })
-        except:
-            pass
-        
-        # ====================================================================
-        # BUG 15: Empty except block
-        # ====================================================================
-        empty_except_pattern = r'except\s+\w+\s*:\s*\n\s*pass'
-        for match in re.finditer(empty_except_pattern, code):
-            line = code[:match.start()].count('\n') + 1
-            issues.append({
-                'line': line,
-                'problem': 'Empty except block',
-                'severity': 'MEDIUM',
-                'suggestion': 'Handle the exception or log it',
-                'category': 'error_handling'
-            })
-        
-        # ====================================================================
-        # BUG 16: Hardcoded secrets
-        # ====================================================================
-        secret_patterns = [
-            (r'password\s*=\s*[\'\"][^\'\"]+[\'\"]', 'Hardcoded password'),
-            (r'api[_-]?key\s*=\s*[\'\"][^\'\"]+[\'\"]', 'Hardcoded API key'),
-            (r'secret\s*=\s*[\'\"][^\'\"]+[\'\"]', 'Hardcoded secret'),
-            (r'token\s*=\s*[\'\"][^\'\"]+[\'\"]', 'Hardcoded token'),
-            (r'aws_access_key_id\s*=', 'AWS access key'),
-            (r'aws_secret_access_key\s*=', 'AWS secret key')
-        ]
-        
-        for pattern, desc in secret_patterns:
-            for match in re.finditer(pattern, code, re.IGNORECASE):
-                line = code[:match.start()].count('\n') + 1
-                issues.append({
-                    'line': line,
-                    'problem': f'{desc}',
-                    'severity': 'HIGH',
-                    'suggestion': 'Use environment variables or secrets manager',
-                    'category': 'security'
-                })
-        
-        # ====================================================================
-        # BUG 17: Type errors
-        # ====================================================================
-        type_error_pattern = r'([\'"]\w+[\'"])\s*\+\s*(\d+)|(\d+)\s*\+\s*([\'"]\w+[\'"])'
-        for match in re.finditer(type_error_pattern, code):
-            line = code[:match.start()].count('\n') + 1
-            issues.append({
-                'line': line,
-                'problem': 'Potential TypeError: concatenating string and int',
-                'severity': 'HIGH',
-                'suggestion': 'Convert int to string using str()',
-                'category': 'bug'
-            })
-        
-        # ====================================================================
-        # BUG 18: Attribute errors
-        # ====================================================================
-        attr_error_patterns = [
-            (r'[\'"].*?[\'"]\.append\(', 'String has no append() method'),
-            (r'\b\d+\b\.split\(', 'Integer has no split() method'),
-            (r'\b\d+\b\.upper\(', 'Integer has no upper() method'),
-            (r'\b\d+\b\.lower\(', 'Integer has no lower() method')
-        ]
-        
-        for pattern, desc in attr_error_patterns:
-            for match in re.finditer(pattern, code):
-                line = code[:match.start()].count('\n') + 1
-                issues.append({
-                    'line': line,
-                    'problem': f'Potential AttributeError: {desc}',
-                    'severity': 'HIGH',
-                    'suggestion': 'Check object type before calling method',
-                    'category': 'bug'
-                })
-        
-        # ====================================================================
-        # BUG 19: Key errors
-        # ====================================================================
-        key_error_pattern = r'(\w+)\[([\'"]\w+[\'"])\]'
-        for match in re.finditer(key_error_pattern, code):
-            dict_name = match.group(1)
-            key = match.group(2)
-            line = code[:match.start()].count('\n') + 1
-            
-            # Check if dict might not have the key
-            if 'get(' not in code[match.start():match.start()+50]:
-                issues.append({
-                    'line': line,
-                    'problem': f'Potential KeyError: accessing key {key} without get()',
-                    'severity': 'MEDIUM',
-                    'suggestion': 'Use dict.get(key) or check key existence',
-                    'category': 'bug'
-                })
-        
-        # ====================================================================
-        # BUG 20: Redefining built-ins
-        # ====================================================================
-        builtins_list = ['list', 'dict', 'set', 'tuple', 'str', 'int', 'float', 
-                        'bool', 'print', 'input', 'open', 'sum', 'min', 'max',
-                        'abs', 'round', 'type', 'len', 'range', 'enumerate',
-                        'zip', 'map', 'filter', 'sorted', 'reversed']
-        
-        for builtin in builtins_list:
-            pattern = rf'^{builtin}\s*=|\s{builtin}\s*='
-            for match in re.finditer(pattern, code, re.MULTILINE):
-                line = code[:match.start()].count('\n') + 1
-                issues.append({
-                    'line': line,
-                    'problem': f'Redefining built-in: {builtin}',
-                    'severity': 'MEDIUM',
-                    'suggestion': f'Use a different variable name instead of {builtin}',
-                    'category': 'best_practice'
-                })
-        
-        # ====================================================================
-        # BUG 21: Invalid escape sequences
-        # ====================================================================
-        invalid_escape = r'(?<!\\)\\(?!\\|\'|\"|n|r|t|b|f|u[0-9a-f]{4}|U[0-9a-f]{8}|x[0-9a-f]{2})[a-zA-Z]'
-        for match in re.finditer(invalid_escape, code):
-            line = code[:match.start()].count('\n') + 1
-            issues.append({
-                'line': line,
-                'problem': f'Invalid escape sequence: \\{match.group()[1]}',
-                'severity': 'MEDIUM',
-                'suggestion': 'Use raw string (r"...") or double backslash',
-                'category': 'syntax'
-            })
-        
-        # ====================================================================
-        # BUG 22: Smart quotes
-        # ====================================================================
-        smart_quotes = ['“', '”', '‘', '’']
-        for i, line in enumerate(lines, 1):
-            for quote in smart_quotes:
-                if quote in line:
-                    issues.append({
-                        'line': i,
-                        'problem': f'Smart quote detected: {quote}',
-                        'severity': 'HIGH',
-                        'suggestion': 'Use regular quotes (") or (\') instead',
-                        'category': 'syntax'
-                    })
-        
-        # ====================================================================
-        # BUG 23: Missing self in class methods
-        # ====================================================================
-        class_pattern = r'class\s+(\w+)'
-        for class_match in re.finditer(class_pattern, code):
-            class_start = class_match.end()
-            class_body = code[class_start:].split('\n\n')[0]
-            
-            method_pattern = r'def\s+(\w+)\s*\([^)]*\):'
-            for method_match in re.finditer(method_pattern, class_body):
-                method_name = method_match.group(1)
-                if not method_name.startswith('__') and 'self' not in method_match.group():
-                    line = code[:class_start + method_match.start()].count('\n') + 1
-                    issues.append({
-                        'line': line,
-                        'problem': f'Missing self parameter in method {method_name}()',
-                        'severity': 'HIGH',
-                        'suggestion': 'Add "self" as first parameter',
-                        'category': 'bug'
-                    })
-        
-        # ====================================================================
-        # BUG 24: Using is with literals
-        # ====================================================================
-        is_literal_pattern = r'\bis\s+(True|False|None|\d+|\'.*?\'|".*?")\b'
-        for match in re.finditer(is_literal_pattern, code):
-            line = code[:match.start()].count('\n') + 1
-            issues.append({
-                'line': line,
-                'problem': 'Using "is" with literal',
-                'severity': 'LOW',
-                'suggestion': 'Use "==" for value comparison',
-                'category': 'best_practice'
-            })
-        
-        # ====================================================================
-        # BUG 25: Wildcard imports
-        # ====================================================================
-        wildcard_pattern = r'from\s+\S+\s+import\s+\*'
-        for match in re.finditer(wildcard_pattern, code):
-            line = code[:match.start()].count('\n') + 1
-            issues.append({
-                'line': line,
-                'problem': 'Wildcard import (from module import *)',
-                'severity': 'MEDIUM',
-                'suggestion': 'Import only what you need',
-                'category': 'best_practice'
-            })
-        
-        # ====================================================================
-        # BUG 26: Global variable modification without global keyword
-        # ====================================================================
-        try:
-            tree = ast.parse(code)
-            global_vars = set()
-            
-            # Find global variables
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Assign):
-                    for target in node.targets:
-                        if isinstance(target, ast.Name) and isinstance(node.ctx, ast.Store):
-                            if not isinstance(node.parent, ast.FunctionDef):
-                                global_vars.add(target.id)
-            
-            # Check function modifications
-            for node in ast.walk(tree):
-                if isinstance(node, ast.FunctionDef):
-                    modifies_global = False
-                    for child in ast.walk(node):
-                        if isinstance(child, ast.Name) and child.id in global_vars:
-                            if isinstance(child.ctx, ast.Store):
-                                modifies_global = True
-                    
-                    if modifies_global:
-                        has_global = False
-                        for child in ast.walk(node):
-                            if isinstance(child, ast.Global):
-                                if child.names and any(g in global_vars for g in child.names):
-                                    has_global = True
-                        
-                        if not has_global:
-                            issues.append({
-                                'line': node.lineno,
-                                'problem': 'Modifying global variable without global keyword',
-                                'severity': 'HIGH',
-                                'suggestion': 'Add "global var" statement inside function',
-                                'category': 'bug'
-                            })
-        except:
-            pass
+        except Exception as e:
+            # Log but don't crash
+            print(f"Analysis error: {e}")
         
         return issues
     
     def _common_analysis(self, code: str) -> List[Dict[str, Any]]:
-        """Language-agnostic analysis"""
+        """Language-agnostic analysis (minimal, low-noise checks)"""
         issues = []
         lines = code.split('\n')
         
-        # Check line length
+        # Check line length (only obvious cases)
         for i, line in enumerate(lines, 1):
-            if len(line) > 100:
+            if len(line) > 120:
                 issues.append({
                     'line': i,
-                    'problem': f'Line too long ({len(line)} characters)',
+                    'problem': f'Line too long ({len(line)} chars)',
                     'severity': 'LOW',
-                    'suggestion': 'Break line into multiple lines (max 100 chars)',
-                    'category': 'style'
+                    'suggestion': 'Break line into multiple lines',
+                    'category': 'style',
+                    'code': line[:50] + '...'
                 })
         
-        # Check function length
-        func_lines = 0
-        func_start = 0
-        in_func = False
-        
+        # Check for TODO/FIXME comments
         for i, line in enumerate(lines, 1):
-            if line.strip().startswith('def ') and line.strip().endswith(':'):
-                in_func = True
-                func_start = i
-                func_lines = 0
-            elif in_func:
-                if line.strip() and not line.strip().startswith('#'):
-                    func_lines += 1
-                if i == len(lines) or (lines[i].strip() and not lines[i-1].strip().startswith(' ') and i > func_start + 1):
-                    if func_lines > 50:
-                        issues.append({
-                            'line': func_start,
-                            'problem': f'Function too long ({func_lines} lines)',
-                            'severity': 'MEDIUM',
-                            'suggestion': 'Break function into smaller functions',
-                            'category': 'maintainability'
-                        })
-                    in_func = False
-        
-        # Check for TODO/FIXME/XXX
-        todo_pattern = r'#.*?(TODO|FIXME|XXX)'
-        for match in re.finditer(todo_pattern, code, re.IGNORECASE):
-            line = code[:match.start()].count('\n') + 1
-            issues.append({
-                'line': line,
-                'problem': f'TODO/FIXME comment found',
-                'severity': 'LOW',
-                'suggestion': 'Address this item before deployment',
-                'category': 'maintenance'
-            })
+            if '#' in line:
+                comment = line[line.index('#'):].lower()
+                if 'todo' in comment or 'fixme' in comment or 'xxx' in comment:
+                    issues.append({
+                        'line': i,
+                        'problem': 'TODO/FIXME comment found',
+                        'severity': 'LOW',
+                        'suggestion': 'Address before deployment',
+                        'category': 'maintenance',
+                        'code': line.strip()
+                    })
         
         return issues
 
-def run_pylint(code: str) -> List[Dict[str, Any]]:
-    """Mock pylint - returns empty list for now"""
-    return []
+
+class ScopeAnalyzer(ast.NodeVisitor):
+    """Tracks variable scope for accurate undefined variable detection"""
+    
+    def __init__(self):
+        self.scopes = [set()]  # Stack of scopes
+        self.imported_names = set()
+        self.builtins = set(dir(builtins))
+        
+    def visit_Import(self, node):
+        for alias in node.names:
+            name = alias.asname or alias.name
+            self.scopes[-1].add(name)
+            self.imported_names.add(name)
+        self.generic_visit(node)
+    
+    def visit_ImportFrom(self, node):
+        for alias in node.names:
+            if alias.name != '*':
+                name = alias.asname or alias.name
+                self.scopes[-1].add(name)
+                self.imported_names.add(name)
+        self.generic_visit(node)
+    
+    def visit_FunctionDef(self, node):
+        # New scope
+        self.scopes.append(set())
+        # Add function name to outer scope
+        self.scopes[-2].add(node.name)
+        # Add arguments
+        for arg in node.args.args:
+            self.scopes[-1].add(arg.arg)
+        if node.args.vararg:
+            self.scopes[-1].add(node.args.vararg.arg)
+        if node.args.kwarg:
+            self.scopes[-1].add(node.args.kwarg.arg)
+        
+        self.generic_visit(node)
+        self.scopes.pop()
+    
+    def visit_ClassDef(self, node):
+        self.scopes[-1].add(node.name)
+        self.generic_visit(node)
+    
+    def visit_Assign(self, node):
+        for target in node.targets:
+            self._add_target(target)
+        self.generic_visit(node)
+    
+    def visit_AnnAssign(self, node):
+        if node.target:
+            self._add_target(node.target)
+        self.generic_visit(node)
+    
+    def visit_For(self, node):
+        self._add_target(node.target)
+        self.generic_visit(node)
+    
+    def visit_With(self, node):
+        for item in node.items:
+            if item.optional_vars:
+                self._add_target(item.optional_vars)
+        self.generic_visit(node)
+    
+    def visit_ExceptHandler(self, node):
+        if node.name:
+            self.scopes[-1].add(node.name)
+        self.generic_visit(node)
+    
+    def _add_target(self, target):
+        if isinstance(target, ast.Name):
+            self.scopes[-1].add(target.id)
+        elif isinstance(target, (ast.Tuple, ast.List)):
+            for elt in target.elts:
+                self._add_target(elt)
+
+
+# For testing
+if __name__ == "__main__":
+    analyzer = CodeAnalyzer()
+    
+    test_code = """
+import os
+from pathlib import Path
+
+def bad_function(password="secret123"):
+    x = []
+    try:
+        result = 10 / 0
+    except:
+        pass
+    
+    if result == None:
+        print("Got none")
+    
+    return x
+
+class Test:
+    def missing_self():
+        pass
+"""
+    
+    issues = analyzer.analyze(test_code)
+    for issue in issues:
+        print(f"[{issue['severity']}] Line {issue['line']}: {issue['problem']}")
+        print(f"    Suggestion: {issue['suggestion']}")
+        if 'code' in issue:
+            print(f"    Code: {issue['code']}")
+        print()

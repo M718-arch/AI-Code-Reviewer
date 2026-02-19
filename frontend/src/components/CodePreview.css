@@ -1,28 +1,59 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --bg-secondary: #111111;
+  --border: #2a2a2a;
+  --text-primary: #f0f0f0;
+  --text-muted: #555555;
+  --accent-green: #00ff88;
+  --accent-red: #ff3333;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
 .code-preview {
-  border-radius: 1rem;
-  overflow: hidden;
+  font-family: var(--font-mono);
 }
 
 .preview-header {
-  background: #2d2d3a;
-  padding: 0.8rem 1rem;
+  background: var(--bg-secondary);
+  padding: 0.6rem 1.25rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid #40404e;
+  border-bottom: 1px solid var(--border);
+}
+
+.preview-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.preview-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-green);
 }
 
 .filename {
-  color: #e2e8f0;
-  font-size: 0.9rem;
+  color: var(--text-primary);
+  font-size: 0.8rem;
   font-weight: 500;
+  letter-spacing: 0.03em;
+}
+
+.preview-meta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
 .language-badge {
-  background: #40404e;
-  color: #a0aec0;
-  padding: 0.2rem 0.8rem;
-  border-radius: 1rem;
-  font-size: 0.8rem;
+  font-size: 0.68rem;
+  color: var(--accent-green);
+  letter-spacing: 0.1em;
   text-transform: uppercase;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid rgba(0,255,136,0.25);
 }

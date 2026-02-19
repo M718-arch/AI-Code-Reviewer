@@ -1,26 +1,22 @@
 import React, { useState } from 'react';
 import './IssueList.css';
-import { FiAlertTriangle, FiAlertCircle, FiInfo, FiChevronDown, FiChevronUp } from 'react-icons/fi';
 
 function IssueList({ issues, code }) {
   const [expandedIssue, setExpandedIssue] = useState(null);
 
   const getSeverityIcon = (severity) => {
     switch (severity?.toUpperCase()) {
-      case 'HIGH':
-        return <FiAlertCircle className="severity-icon high" />;
-      case 'MEDIUM':
-        return <FiAlertTriangle className="severity-icon medium" />;
-      default:
-        return <FiInfo className="severity-icon low" />;
+      case 'HIGH':   return <span className="severity-icon high">✗</span>;
+      case 'MEDIUM': return <span className="severity-icon medium">△</span>;
+      default:       return <span className="severity-icon low">◦</span>;
     }
   };
 
   const getSeverityClass = (severity) => {
     switch (severity?.toUpperCase()) {
-      case 'HIGH': return 'high';
+      case 'HIGH':   return 'high';
       case 'MEDIUM': return 'medium';
-      default: return 'low';
+      default:       return 'low';
     }
   };
 
@@ -44,36 +40,37 @@ function IssueList({ issues, code }) {
           <div className="issue-header">
             <div className="issue-title">
               {getSeverityIcon(issue.severity)}
-              <span className="issue-line">Line {issue.line}</span>
+              <span className="issue-line">ln:{issue.line}</span>
               <span className="issue-problem">{issue.problem}</span>
             </div>
             <div className="issue-meta">
               <span className="issue-severity">{issue.severity}</span>
               <span className="issue-category">{issue.category}</span>
-              {expandedIssue === index ? <FiChevronUp /> : <FiChevronDown />}
+              <span className={`issue-toggle ${expandedIssue === index ? 'open' : ''}`}>▾</span>
             </div>
           </div>
 
           {expandedIssue === index && (
             <div className="issue-details">
               <div className="issue-suggestion">
-                <strong>💡 Suggestion:</strong> {issue.suggestion}
+                <strong>→ suggestion:</strong> {issue.suggestion}
               </div>
 
               {issue.line && (
                 <div className="issue-code">
-                  <strong>📄 Code at line {issue.line}:</strong>
-                  <pre>
-                    <code>{getLineCode(issue.line)}</code>
-                  </pre>
+                  <strong>source at line {issue.line}:</strong>
+                  <pre><code>{getLineCode(issue.line)}</code></pre>
                 </div>
               )}
 
-              <button className="fix-btn" onClick={(e) => {
-                e.stopPropagation();
-                alert(`Fix: ${issue.suggestion}`);
-              }}>
-                🔧 Show Fix
+              <button
+                className="fix-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  alert(`Fix: ${issue.suggestion}`);
+                }}
+              >
+                → apply fix
               </button>
             </div>
           )}

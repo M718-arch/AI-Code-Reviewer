@@ -1,66 +1,143 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
+
 .navbar {
-  background: white;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  background: #0a0a0a;
+  border-bottom: 1px solid #1e1e1e;
   position: sticky;
   top: 0;
   z-index: 1000;
+  font-family: 'JetBrains Mono', monospace;
 }
 
 .nav-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 1rem 2rem;
+  width: 100%;
+  max-width: 100%;
+  padding: 0 4rem;
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: stretch;
+  height: 52px;
 }
 
+/* Terminal window dots */
 .nav-logo {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 1.3rem;
-  font-weight: 600;
+  gap: 0.75rem;
 }
 
-.logo-icon {
-  font-size: 1.8rem;
+.terminal-dots {
+  display: flex;
+  gap: 5px;
+  align-items: center;
 }
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.dot.red   { background: #ff3333; }
+.dot.yellow{ background: #ffcc00; }
+.dot.green { background: #00ff88; }
 
 .logo-text {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  -webkit-background-clip: text;
-  background-clip: text;  /* Add this line */
-  -webkit-text-fill-color: transparent;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #888;
+  letter-spacing: 0.05em;
 }
 
+.logo-text .green { color: #00ff88; }
+.logo-text .red   { color: #ff3333; }
+
+/* Nav links */
 .nav-links {
   display: flex;
-  gap: 2rem;
+  align-items: stretch;
+  gap: 0;
 }
 
 .nav-link {
   text-decoration: none;
-  color: #4a5568;
+  color: #555;
+  font-size: 0.78rem;
   font-weight: 500;
-  transition: color 0.3s ease;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0 1.25rem;
+  display: flex;
+  align-items: center;
+  position: relative;
+  transition: color 0.15s ease;
+  border-left: 1px solid #1a1a1a;
 }
 
-.nav-link:hover,
+.nav-link::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent, #00ff88);
+  transform: scaleX(0);
+  transition: transform 0.15s ease;
+}
+
+.nav-link:hover {
+  color: #f0f0f0;
+}
+
+.nav-link:hover::after {
+  transform: scaleX(1);
+}
+
 .nav-link.active {
-  color: #667eea;
+  color: #00ff88;
+}
+
+.nav-link.active::after {
+  transform: scaleX(1);
+}
+
+.nav-link.github-link {
+  --accent: #ff3333;
+  color: #555;
+}
+
+.nav-link.github-link:hover {
+  color: #ff3333;
+}
+
+/* Right section: version badge */
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding-left: 1.5rem;
+  border-left: 1px solid #1a1a1a;
+}
+
+.version-badge {
+  font-size: 0.7rem;
+  color: #333;
+  letter-spacing: 0.05em;
 }
 
 @media (max-width: 768px) {
   .nav-container {
-    padding: 1rem;
+    padding: 0 1rem;
   }
-  
-  .nav-links {
-    gap: 1rem;
-  }
-  
   .logo-text {
+    display: none;
+  }
+  .nav-link {
+    padding: 0 0.75rem;
+    font-size: 0.72rem;
+  }
+  .nav-right {
     display: none;
   }
 }

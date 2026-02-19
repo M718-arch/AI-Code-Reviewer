@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import './FileUploader.css';
 import { FiUpload, FiFile, FiX, FiGithub, FiClipboard } from 'react-icons/fi';
 
@@ -10,6 +10,8 @@ function FileUploader({ onCodeLoaded }) {
   const [githubUrl, setGithubUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const fileInputRef = useRef(null);
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -26,25 +28,23 @@ function FileUploader({ onCodeLoaded }) {
     e.stopPropagation();
     setDragActive(false);
     setError('');
-
     const file = e.dataTransfer.files[0];
-    if (file) {
-      await processFile(file);
-    }
+    if (file) await processFile(file);
   };
 
   const handleFileChange = async (e) => {
-    e.preventDefault();
     setError('');
     const file = e.target.files[0];
-    if (file) {
-      await processFile(file);
-    }
+    if (file) await processFile(file);
+  };
+
+  const handleDropzoneClick = () => {
+    fileInputRef.current.click();
   };
 
   const processFile = async (file) => {
     const validExtensions = [
-      '.py', '.js', '.java', '.cpp', '.c', '.cs', '.php', 
+      '.py', '.js', '.java', '.cpp', '.c', '.cs', '.php',
       '.rb', '.go', '.rs', '.swift', '.kt', '.ts', '.tsx',
       '.jsx', '.html', '.css', '.json', '.xml'
     ];
@@ -55,7 +55,6 @@ function FileUploader({ onCodeLoaded }) {
       return;
     }
 
-    // Check file size (max 10MB)
     if (file.size > 10 * 1024 * 1024) {
       setError('File too large. Maximum size is 10MB.');
       return;
@@ -79,11 +78,8 @@ function FileUploader({ onCodeLoaded }) {
     const pastedCode = e.target.value;
     setCode(pastedCode);
     setError('');
-    
-    // Detect file type from content
     const detectedType = detectLanguage(pastedCode);
     const filename = `pasted_code.${detectedType}`;
-    
     setFileName(filename);
     onCodeLoaded(pastedCode, filename);
   };
@@ -103,55 +99,30 @@ function FileUploader({ onCodeLoaded }) {
       setError('Please enter a GitHub URL');
       return;
     }
-
     setLoading(true);
     setError('');
-    
     try {
-      // Convert various GitHub URL formats to raw URL
       let rawUrl = githubUrl.trim();
-      
-      // Handle github.com URLs
-      if (rawUrl.includes('github.com')) {
+      if (rawUrl.includes('github.com') && !rawUrl.includes('raw.githubusercontent.com')) {
         rawUrl = rawUrl
           .replace('github.com', 'raw.githubusercontent.com')
           .replace('/blob/', '/');
       }
-      
-      // Already raw URL - use as is
-      if (rawUrl.includes('raw.githubusercontent.com')) {
-        // URL is already in raw format
-      }
-      
-      // Handle gist URLs
       if (rawUrl.includes('gist.github.com')) {
         setError('Please use the "Raw" button on the gist and paste that URL');
         setLoading(false);
         return;
       }
-
-      console.log('Fetching from:', rawUrl);
-
       const response = await fetch(rawUrl);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
-      }
-
+      if (!response.ok) throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
       const content = await response.text();
-      
-      // Extract filename from URL
       const urlParts = githubUrl.split('/');
       const filename = urlParts[urlParts.length - 1] || 'github_code.py';
-
       setCode(content);
       setFileName(filename);
       onCodeLoaded(content, filename);
       setError('');
-      
-      console.log('✅ Successfully loaded from GitHub:', filename);
     } catch (error) {
-      console.error('GitHub fetch error:', error);
       setError(`Failed to fetch from GitHub: ${error.message}`);
     } finally {
       setLoading(false);
@@ -171,11 +142,22 @@ function FileUploader({ onCodeLoaded }) {
     setCode('');
     setGithubUrl('');
     setError('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
     onCodeLoaded('', '');
   };
 
   return (
     <div className="file-uploader">
+
+      {/* Hidden file input — outside dropzone */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        onChange={handleFileChange}
+        accept=".py,.js,.jsx,.ts,.tsx,.java,.cpp,.c,.cs,.php,.rb,.go,.rs,.swift,.kt,.html,.css,.json,.xml"
+        style={{ display: 'none' }}
+      />
+
       {/* Tab Selection */}
       <div className="input-method-tabs">
         <button
@@ -211,26 +193,20 @@ function FileUploader({ onCodeLoaded }) {
           {inputMethod === 'upload' && (
             <div
               className={`dropzone ${dragActive ? 'active' : ''}`}
+              onClick={handleDropzoneClick}
               onDragEnter={handleDrag}
               onDragLeave={handleDrag}
               onDragOver={handleDrag}
               onDrop={handleDrop}
             >
-              <input
-                type="file"
-                id="file-input"
-                onChange={handleFileChange}
-                accept=".py,.js,.jsx,.ts,.tsx,.java,.cpp,.c,.cs,.php,.rb,.go,.rs,.swift,.kt,.html,.css,.json,.xml"
-                style={{ display: 'none' }}
-              />
-              <label htmlFor="file-input" className="dropzone-label">
+              <div className="dropzone-label">
                 <FiUpload className="upload-icon" />
                 <h3>Drop your code file here</h3>
                 <p>or click to browse</p>
                 <span className="file-types">
                   Supports: Python, JavaScript, Java, C++, C#, PHP, Ruby, Go, Rust, Swift, Kotlin, HTML, CSS
                 </span>
-              </label>
+              </div>
             </div>
           )}
 
@@ -239,18 +215,13 @@ function FileUploader({ onCodeLoaded }) {
             <div className="paste-section">
               <textarea
                 className="paste-textarea"
-                placeholder="Paste your code here...
-
-Example:
-def hello():
-    print('Hello, World!')
-"
+                placeholder={`Paste your code here...\n\nExample:\ndef hello():\n    print('Hello, World!')`}
                 rows={15}
                 onChange={handlePasteChange}
                 value={code}
               />
               <p className="paste-hint">
-                💡 Just paste your code and it will be automatically analyzed
+                Just paste your code and it will be automatically analyzed
               </p>
             </div>
           )}
@@ -266,11 +237,7 @@ def hello():
                   placeholder="https://github.com/username/repo/blob/main/file.py"
                   value={githubUrl}
                   onChange={(e) => setGithubUrl(e.target.value)}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      handleGithubFetch();
-                    }
-                  }}
+                  onKeyPress={(e) => { if (e.key === 'Enter') handleGithubFetch(); }}
                 />
                 <button
                   className="github-fetch-btn"
@@ -280,7 +247,7 @@ def hello():
                   {loading ? '⏳ Fetching...' : '🔍 Fetch Code'}
                 </button>
               </div>
-              
+
               <div className="github-examples">
                 <p className="github-hint">
                   <strong>📝 Supported URL formats:</strong>
@@ -291,7 +258,7 @@ def hello():
                   <li>✅ Click "Raw" button on any GitHub file and paste that URL</li>
                 </ul>
                 <p className="github-example">
-                  <strong>💡 Quick Example:</strong> Try this URL:<br/>
+                  <strong>💡 Quick Example:</strong> Try this URL:<br />
                   <code>https://raw.githubusercontent.com/python/cpython/main/Lib/json/__init__.py</code>
                 </p>
               </div>
@@ -299,7 +266,7 @@ def hello():
           )}
         </>
       ) : (
-        /* Code Loaded - Show Editor */
+        /* Code Loaded */
         <div className="file-info">
           <div className="file-details">
             <FiFile className="file-icon" />
@@ -308,10 +275,10 @@ def hello():
               {code.split('\n').length} lines • {code.length} chars
             </div>
             <div className="file-actions">
-              <button className="btn-copy" onClick={handleCopy} title="Copy code">
+              <button className="btn-copy" onClick={handleCopy}>
                 📋 Copy
               </button>
-              <button className="btn-clear" onClick={handleClear} title="Clear and start over">
+              <button className="btn-clear" onClick={handleClear}>
                 <FiX /> Clear
               </button>
             </div>
@@ -325,7 +292,7 @@ def hello():
             spellCheck={false}
           />
           <p className="edit-hint">
-            💡 You can edit the code above before reviewing
+            You can edit the code above before reviewing
           </p>
         </div>
       )}

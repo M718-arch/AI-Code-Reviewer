@@ -1,50 +1,65 @@
 import React from 'react';
 import './Metrics.css';
-import { FiCode, FiFile, FiCpu, FiAlertCircle } from 'react-icons/fi';
 
 function Metrics({ stats, summary }) {
   if (!stats || !summary) return null;
 
   const metrics = [
     {
-      icon: <FiFile />,
-      label: 'Total Lines',
+      icon: '▤',
+      label: 'total_lines',
       value: stats.total_lines,
-      color: '#667eea'
+      colorClass: 'white',
+      accent: '#f0f0f0',
+      sub: 'lines of code',
     },
     {
-      icon: <FiCode />,
-      label: 'Code Lines',
+      icon: '{ }',
+      label: 'code_lines',
       value: stats.code_lines,
-      color: '#48bb78'
+      colorClass: 'green',
+      accent: '#00ff88',
+      sub: 'executable lines',
     },
     {
-      icon: <FiCpu />,
-      label: 'Functions',
+      icon: 'ƒ',
+      label: 'functions',
       value: stats.functions,
-      color: '#ed8936'
+      colorClass: 'white',
+      accent: '#f0f0f0',
+      sub: 'detected functions',
     },
     {
-      icon: <FiAlertCircle />,
-      label: 'Issues',
+      icon: '⚠',
+      label: 'issues',
       value: summary.total_issues,
-      color: '#f56565'
-    }
+      colorClass: summary.total_issues === 0 ? 'green' : 'red',
+      accent: summary.total_issues === 0 ? '#00ff88' : '#ff3333',
+      sub: summary.total_issues === 0 ? 'no issues found' : 'require attention',
+    },
   ];
 
   return (
-    <div className="metrics-grid">
-      {metrics.map((metric, index) => (
-        <div key={index} className="metric-card">
-          <div className="metric-icon" style={{ background: `${metric.color}20`, color: metric.color }}>
-            {metric.icon}
+    <div className="metrics-wrapper">
+      <div className="metrics-header">
+        output.stats
+      </div>
+      <div className="metrics-grid">
+        {metrics.map((metric, index) => (
+          <div
+            key={index}
+            className="metric-card"
+            style={{ '--accent-color': metric.accent }}
+          >
+            <div className="metric-icon">{metric.icon}</div>
+            <div className="metric-label">{metric.label}</div>
+            <div className={`metric-value ${metric.colorClass}`}>
+              {metric.value}
+            </div>
+            <div className="metric-sub">{metric.sub}</div>
           </div>
-          <div className="metric-content">
-            <span className="metric-label">{metric.label}</span>
-            <span className="metric-value">{metric.value}</span>
-          </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
