@@ -6,7 +6,6 @@
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![React](https://img.shields.io/badge/react-18.x-61dafb.svg)](https://reactjs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104.1-009688.svg)](https://fastapi.tiangolo.com)
-[![Docker](https://img.shields.io/badge/docker-supported-2496ED.svg)](https://docker.com)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
 
@@ -14,7 +13,7 @@
 
 **A powerful, terminal-inspired code analysis tool that helps developers identify bugs, security vulnerabilities, and bad practices in their code.**
 
-[Installation](#-quick-start) • [Features](#-features) • [API](#-api-documentation) • [Docker](#-docker-setup) • [Contributing](#-contributing)
+[Installation](#-quick-start) • [Features](#-features) • [API](#-api-documentation) • [Testing](#-testing) • [Contributing](#-contributing)
 
 </div>
 
@@ -27,7 +26,6 @@
 - [Project Structure](#-project-structure)
 - [API Documentation](#-api-documentation)
 - [Analysis Engine](#-analysis-engine)
-- [Docker Setup](#-docker-setup)
 - [Testing](#-testing)
 - [Contributing](#-contributing)
 - [License](#-license)
