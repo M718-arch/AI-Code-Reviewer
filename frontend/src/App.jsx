@@ -162,7 +162,7 @@ function App() {
           </div>
           <div className="status-item">
             <div className="status-dot red"></div>
-            <span>12 languages supported</span>
+            <span>14 languages supported</span>
           </div>
           <div className="status-item">
             <span>v2.0.0</span>
